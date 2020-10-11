@@ -1,4 +1,5 @@
-import { BaseModule, StateStore } from 'lisk-sdk';
+import { BaseModule } from 'lisk-sdk';
+import { DeployAsset, ExecuteAsset } from './assets';
 
 export class ContractModule extends BaseModule {
 	public id = 1111;
@@ -21,6 +22,7 @@ export class ContractModule extends BaseModule {
 			contracts: [],
 		},
 	};
+	public transactionAssets = [new DeployAsset(), new ExecuteAsset(this._channel)];
 
 	public actions = {
 		getCode: async (params: Record<string, unknown>): Promise<Buffer | undefined> => {

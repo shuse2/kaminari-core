@@ -11,7 +11,8 @@
  *
  * Removal or modification of this copyright notice is prohibited.
  */
-import { Application, ApplicationConfig, HTTPAPIPlugin, ForgerPlugin } from 'lisk-sdk';
+import { Application, HTTPAPIPlugin, ForgerPlugin, PartialApplicationConfig } from 'lisk-sdk';
+import { ContractModule } from './modules/contract/contract_module';
 
 export interface Options {
 	enableHTTPAPIPlugin: boolean;
@@ -21,11 +22,28 @@ export interface Options {
 // Temporally disable eslint
 /* eslint-disable */
 export const getApplication = (
-	genesisBlock: Record<string, unknown>,
-	config: ApplicationConfig,
+	genesisBlock: any,
+	config: PartialApplicationConfig,
 	options: Options,
 ): Application => {
-	const app = Application.defaultApplication(genesisBlock, config);
+	const updatedGenesisBlock = {
+		...genesisBlock,
+		header: {
+			...genesisBlock.header,
+			asset: {
+				...genesisBlock.header.asset,
+				accounts: genesisBlock.header.asset.accounts.map(acc => ({
+					...acc,
+					contract: {
+						contracts: [],
+					},
+				})),
+			},
+		},
+
+	}
+	const app = Application.defaultApplication(updatedGenesisBlock, config);
+	app.registerModule(ContractModule);
 
 	if (options.enableHTTPAPIPlugin) {
 		app.registerPlugin(HTTPAPIPlugin, { loadAsChildProcess: true });
