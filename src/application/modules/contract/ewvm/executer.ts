@@ -1,4 +1,8 @@
-import { parentPort, isMainThread } from 'worker_threads';
+import { parentPort, isMainThread, workerData } from 'worker_threads';
+import { SyncCalls } from '../sync-calls';
+import { VMCommunicationExecuted, VMWorkerData } from '../types';
+import { RESULT_STATUS_FAILURE } from './constants';
+import { Env } from './env';
 
 if (isMainThread) {
 	throw new Error('it should not run on main thread');
@@ -7,38 +11,56 @@ if (parentPort === null) {
 	throw new Error('Parent port is not open');
 }
 
-const abort = msg => {
-	console.log('abort', msg)
-	throw new Error(msg);
-}
+const channel = parentPort;
+const {
+	sharedBuffer,
+	callee,
+	caller,
+	code,
+	origin,
+	balance,
+	gasLimit,
+	gasPrice,
+	generatorAddress,
+	input,
+	lastBlockHeight,
+	lastBlockTimestamp,
+	immutable,
+} = workerData as VMWorkerData;
 
-const print32 = val => {
-	console.log('print', val);
-}
+const syncCalls = new SyncCalls(sharedBuffer);
 
-const loadPreStateRoot = (sharedArray, ptr) => {
-	Atomics.compareExchange(sharedArray, 0, unlocked, locked);
-	parentPort.postMessage({ action: 'query' });
-	Atomics.wait(sharedArray, 0, locked);
-}
+const env = new Env({
+	syncCalls,
+	messagePort: channel,
+	callee,
+	code,
+	caller,
+	origin,
+	balance,
+	gasLimit,
+	gasPrice,
+	generatorAddress,
+	input,
+	lastBlockHeight,
+	lastBlockTimestamp,
+	immutable,
+});
 
-let active = false;
-
-parentPort.on('message', async (message: Record<string, unknown>) => {
-	const { action } = message;
-	if (action === 'execute') {
-		if (active) {
-			console.log('currently active')
-			return;
-		}
-		active = true;
-		const { code, memory, sharedArray } = message;
-		console.log('starting')
-		const lib = await WebAssembly.instantiate(new Uint8Array(code), { env: { abort, print32, loadPreStateRoot: ptr => loadPreStateRoot(sharedArray, ptr) } });
-		const func = lib.instance.exports;
-		func.main();
-		console.log('done')
-		parentPort.postMessage({ action: 'executed', memory: func.memory.buffer });
-		active = false;
+const execute = async (): Promise<void> => {
+	const lib = await WebAssembly.instantiate(new Uint8Array(code), { ethereum: env.exports });
+	const exported = lib.instance.exports;
+	const memory = exported.memory as WebAssembly.Memory;
+	env.setMemory(memory.buffer as SharedArrayBuffer);
+	if (typeof exported.main !== 'function') {
+		throw new Error('main function is not exported');
 	}
+	exported.main();
+};
+
+execute().then(() => {
+	channel.postMessage({ action: 'executed', usedGas: env.usedGas, resultData: env.output, resultStatus: env.resultStatus } as VMCommunicationExecuted);
+}).catch(err => {
+	console.error(err);
+	channel.postMessage({ action: 'executed', usedGas: env.usedGas, resultData: env.output, resultStatus: RESULT_STATUS_FAILURE } as VMCommunicationExecuted);
 });

@@ -1,3 +1,4 @@
+/* eslint-disable no-param-reassign */
 /*
  * Copyright © 2020 Lisk Foundation
  *
@@ -16,7 +17,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Command, flags as flagParser } from '@oclif/command';
 import * as fs from 'fs-extra';
-import { ApplicationConfig, utils, HTTPAPIPlugin, ForgerPlugin } from 'lisk-sdk';
+import { ApplicationConfig, HTTPAPIPlugin, MonitorPlugin, utils } from 'lisk-sdk';
 import {
 	getDefaultPath,
 	splitPath,
@@ -32,12 +33,58 @@ import { flags as commonFlags } from '../utils/flags';
 import { getApplication } from '../application';
 import { DEFAULT_NETWORK } from '../constants';
 
+interface Flags {
+	[key: string]: string | number | boolean | undefined;
+}
+
 const LOG_OPTIONS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+
+const setPluginConfig = (config: ApplicationConfig, flags: Flags): void => {
+	if (flags['http-api-plugin-port'] !== undefined) {
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		config.plugins[HTTPAPIPlugin.alias] = config.plugins[HTTPAPIPlugin.alias] ?? {};
+		config.plugins[HTTPAPIPlugin.alias].port = flags['http-api-plugin-port'];
+	}
+	if (
+		flags['http-api-plugin-whitelist'] !== undefined &&
+		typeof flags['http-api-plugin-whitelist'] === 'string'
+	) {
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		config.plugins[HTTPAPIPlugin.alias] = config.plugins[HTTPAPIPlugin.alias] ?? {};
+		config.plugins[HTTPAPIPlugin.alias].whiteList = flags['http-api-plugin-whitelist']
+			.split(',')
+			.filter(Boolean);
+	}
+	if (flags['monitor-plugin-port'] !== undefined) {
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		config.plugins[MonitorPlugin.alias] = config.plugins[MonitorPlugin.alias] ?? {};
+		config.plugins[MonitorPlugin.alias].port = flags['monitor-plugin-port'];
+	}
+	if (
+		flags['monitor-plugin-whitelist'] !== undefined &&
+		typeof flags['monitor-plugin-whitelist'] === 'string'
+	) {
+		// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+		config.plugins[MonitorPlugin.alias] = config.plugins[MonitorPlugin.alias] ?? {};
+		config.plugins[MonitorPlugin.alias].whiteList = flags['monitor-plugin-whitelist']
+			.split(',')
+			.filter(Boolean);
+	}
+};
 
 export default class StartCommand extends Command {
 	static description = 'Start Lisk Core Node.';
 
-	static examples = ['start', 'start --network dev --data-path ./data --log debug'];
+	static examples = [
+		'start',
+		'start --network devnet --data-path /path/to/data-dir --log debug',
+		'start --network devnet --api-ws',
+		'start --network devnet --api-ws --api-ws-port 8888',
+		'start --network devnet --port 9000',
+		'start --network devnet --port 9002 --seed-peers 127.0.0.1:9001,127.0.0.1:9000',
+		'start --network testnet --overwrite-config',
+		'start --network testnet --config ~/my_custom_config.json',
+	];
 
 	static flags = {
 		'data-path': flagParser.string({
@@ -65,10 +112,20 @@ export default class StartCommand extends Command {
 				'Open port for the peer to peer incoming connections. Environment variable "LISK_PORT" can also be used.',
 			env: 'LISK_PORT',
 		}),
-		'enable-ipc': flagParser.boolean({
+		'api-ipc': flagParser.boolean({
 			description:
 				'Enable IPC communication. This will also load up plugins in child process and communicate over IPC.',
 			default: false,
+			exclusive: ['api-ws'],
+		}),
+		'api-ws': flagParser.boolean({
+			description: 'Enable websocket communication for api-client.',
+			default: false,
+			exclusive: ['api-ipc'],
+		}),
+		'api-ws-port': flagParser.integer({
+			description: 'Port to be used for api-client websocket.',
+			dependsOn: ['api-ws'],
 		}),
 		'console-log': flagParser.string({
 			description:
@@ -111,20 +168,28 @@ export default class StartCommand extends Command {
 			env: 'LISK_ENABLE_FORGER_PLUGIN',
 			default: false,
 		}),
-		'forger-plugin-port': flagParser.integer({
+		'enable-monitor-plugin': flagParser.boolean({
 			description:
-				'Port to be used for Forger Plugin. Environment variable "LISK_FORGER_PLUGIN_PORT" can also be used.',
-			env: 'LISK_FORGER_PLUGIN_PORT',
-			dependsOn: ['enable-forger-plugin'],
+				'Enable Monitor Plugin. Environment variable "LISK_ENABLE_MONITOR_PLUGIN" can also be used.',
+			env: 'LISK_ENABLE_MONITOR_PLUGIN',
+			default: false,
 		}),
-		'forger-plugin-whitelist': flagParser.string({
+		'monitor-plugin-port': flagParser.integer({
 			description:
-				'List of IPs in comma separated value to allow the connection. Environment variable "LISK_FORGER_PLUGIN_WHITELIST" can also be used.',
-			env: 'LISK_FORGER_PLUGIN_WHITELIST',
-			dependsOn: ['enable-forger-plugin'],
+				'Port to be used for Monitor Plugin. Environment variable "LISK_MONITOR_PLUGIN_PORT" can also be used.',
+			env: 'LISK_MONITOR_PLUGIN_PORT',
+			dependsOn: ['enable-monitor-plugin'],
 		}),
-		'enable-stress': flagParser.boolean({
-			description: 'Enable Stress Plugin.',
+		'monitor-plugin-whitelist': flagParser.string({
+			description:
+				'List of IPs in comma separated value to allow the connection. Environment variable "LISK_MONITOR_PLUGIN_WHITELIST" can also be used.',
+			env: 'LISK_MONITOR_PLUGIN_WHITELIST',
+			dependsOn: ['enable-monitor-plugin'],
+		}),
+		'enable-report-misbehavior-plugin': flagParser.boolean({
+			description:
+				'Enable ReportMisbehavior Plugin. Environment variable "LISK_ENABLE_REPORT_MISBEHAVIOR_PLUGIN" can also be used.',
+			env: 'LISK_ENABLE_MONITOR_PLUGIN',
 			default: false,
 		}),
 	};
@@ -133,14 +198,16 @@ export default class StartCommand extends Command {
 	async run(): Promise<void> {
 		const { flags } = this.parse(StartCommand);
 		const dataPath = flags['data-path'] ? flags['data-path'] : getDefaultPath();
-		this.log(`Starting Lisk Core at ${getFullPath(dataPath)}`);
+		this.log(`Starting Lisk Core at ${getFullPath(dataPath)}.`);
 		const pathConfig = splitPath(dataPath);
 
 		const defaultNetworkConfigs = getDefaultConfigDir();
 		const defaultNetworkConfigDir = getConfigDirs(defaultNetworkConfigs);
 		if (!defaultNetworkConfigDir.includes(flags.network)) {
 			this.error(
-				`Network must be one of ${defaultNetworkConfigDir.join(',')} but received ${flags.network}`,
+				`Network must be one of ${defaultNetworkConfigDir.join(',')} but received ${
+					flags.network
+				}.`,
 			);
 		}
 
@@ -152,7 +219,7 @@ export default class StartCommand extends Command {
 				this.error(
 					`Datapath ${dataPath} already contains configs for ${configDir.join(
 						',',
-					)}. Please use --overwrite-config to overwrite the config`,
+					)}. Please use --overwrite-config to overwrite the config.`,
 				);
 			}
 			// Remove other network configs
@@ -200,8 +267,11 @@ export default class StartCommand extends Command {
 		config.label = pathConfig.label;
 		config.version = this.config.pjson.version;
 		// Inject other properties specified
-		if (flags['enable-ipc']) {
-			config.ipc = { enabled: flags['enable-ipc'] };
+		if (flags['api-ipc']) {
+			config.rpc = { enable: flags['api-ipc'], mode: 'ipc' };
+		}
+		if (flags['api-ws']) {
+			config.rpc = { enable: flags['api-ws'], mode: 'ws', port: flags['api-ws-port'] };
 		}
 		if (flags['console-log']) {
 			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
@@ -227,38 +297,19 @@ export default class StartCommand extends Command {
 			for (const seed of peers) {
 				const [ip, port] = seed.split(':');
 				if (!ip || !port || Number.isNaN(Number(port))) {
-					this.error('Invalid ip or port is specified.');
+					this.error('Invalid seed-peers, ip or port is invalid or not specified.');
 				}
 				config.network.seedPeers.push({ ip, port: Number(port) });
 			}
 		}
 		// Plugin configs
-		if (flags['http-api-plugin-port'] !== undefined) {
-			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-			config.plugins[HTTPAPIPlugin.alias] = config.plugins[HTTPAPIPlugin.alias] ?? {};
-			config.plugins[HTTPAPIPlugin.alias].port = flags['http-api-plugin-port'];
-		}
-		if (flags['http-api-plugin-whitelist'] !== undefined) {
-			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-			config.plugins[HTTPAPIPlugin.alias] = config.plugins[HTTPAPIPlugin.alias] ?? {};
-			config.plugins[HTTPAPIPlugin.alias].whiteList = flags['http-api-plugin-whitelist'].split(',');
-		}
-		if (flags['forger-plugin-port'] !== undefined) {
-			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-			config.plugins[ForgerPlugin.alias] = config.plugins[ForgerPlugin.alias] ?? {};
-			config.plugins[ForgerPlugin.alias].port = flags['forger-plugin-port'];
-		}
-		if (flags['forger-plugin-whitelist'] !== undefined) {
-			// eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
-			config.plugins[ForgerPlugin.alias] = config.plugins[ForgerPlugin.alias] ?? {};
-			config.plugins[ForgerPlugin.alias].whiteList = flags['forger-plugin-whitelist'].split(',');
-		}
+		setPluginConfig(config, flags);
+
 		// Get application and start
 		try {
 			const app = getApplication(genesisBlock, config, {
 				enableHTTPAPIPlugin: flags['enable-http-api-plugin'],
 				enableForgerPlugin: flags['enable-forger-plugin'],
-				enableStress: flags['enable-stress'],
 			});
 			await app.run();
 		} catch (errors) {

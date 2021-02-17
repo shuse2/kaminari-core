@@ -1,8 +1,12 @@
 /* eslint-disable class-methods-use-this */
 import { ApplyAssetContext, BaseAsset, ValidateAssetContext } from 'lisk-sdk';
+import { createContract } from '../data_access/contract';
 
 interface Asset {
-	code: Buffer;
+	amount: bigint;
+	data: Buffer;
+	gasLimit: bigint;
+	gasPrice: number;
 }
 
 export class DeployAsset extends BaseAsset {
@@ -12,9 +16,21 @@ export class DeployAsset extends BaseAsset {
 		$id: 'kaminari/contract/deploy',
 		type: 'object',
 		properties: {
-			code: {
+			amount: {
 				fieldNumber: 1,
+				dataType: 'uint64',
+			},
+			data: {
+				fieldNumber: 2,
 				dataType: 'bytes',
+			},
+			gasLimit: {
+				fieldNumber: 3,
+				dataType: 'uint64',
+			},
+			gasPrice: {
+				fieldNumber: 4,
+				dataType: 'uint32',
 			},
 		},
 	};
@@ -25,8 +41,10 @@ export class DeployAsset extends BaseAsset {
 	}
 
 	public async apply(context: ApplyAssetContext<Asset>): Promise<void> {
-		await new Promise(resolve => setTimeout(resolve, 100));
-		// eslint-disable-next-line no-console
-		console.log(context);
+		// inject gas measurement code
+		// const address = getContractAddress(context.transaction.senderAddress, context.transaction.nonce);
+		// store contract
+		await createContract(context.stateStore, context.transaction.senderAddress, context.transaction.nonce, context.transaction.senderAddress, context.asset.amount, context.asset.data);
+		await context.reducerHandler.invoke('token:debit', { address: context.transaction.senderAddress, amount: context.asset.amount });
 	}
 }
