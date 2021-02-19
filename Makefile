@@ -7,7 +7,8 @@ init.soll:
 	docker pull secondstate/soll
 
 wasm.build:
-	docker run --rm -it -v $(shell pwd)/sol:/sources hyperledgerlabs/solang -v -o /sources --target ewasm /sources/${FILE}
+	# docker run --rm -it -v $(shell pwd)/sol:/sources hyperledgerlabs/solang -v -o /sources --target ewasm /sources/${FILE}
+	solang --standard-json --target ewasm ./sol/${FILE} > ./sol/flipper.json
 
 wasm.build.substrate:
 	docker run --rm -it -v $(shell pwd)/sol:/sources hyperledgerlabs/solang -v -o /sources --target substrate /sources/${FILE}

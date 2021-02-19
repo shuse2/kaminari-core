@@ -7,7 +7,7 @@ import { BaseModuleChannel } from '../types';
 interface Asset {
 	address: Buffer;
 	amount: bigint;
-	data: Buffer;
+	input: Buffer;
 	gasLimit: bigint;
 	gasPrice: number;
 }
@@ -44,17 +44,15 @@ export class ExecuteAsset extends BaseAsset {
 		this._channel = channel;
 	}
 
-	public validate(context: ValidateAssetContext<Asset>): void {
+	public validate(_context: ValidateAssetContext<Asset>): void {
 		// eslint-disable-next-line no-console
-		console.log(context);
 	}
 
 	public async apply(context: ApplyAssetContext<Asset>): Promise<void> {
 		const vm = new VM();
-		const senderBalance = await context.reducerHandler.invoke<bigint>('token:getBalance', { address: context.transaction.senderAddress });
 		const contract = await getContract(context.stateStore, context.asset.address);
-		await vm.execute({
-			balance: senderBalance,
+		const result = await vm.execute({
+			balance: BigInt(0),
 			callee: context.asset.address,
 			caller: context.transaction.senderAddress,
 			origin: context.transaction.senderAddress,
@@ -63,9 +61,12 @@ export class ExecuteAsset extends BaseAsset {
 			channel: this._channel,
 			gasLimit: context.asset.gasLimit,
 			gasPrice: context.asset.gasPrice,
-			input: context.asset.data,
+			input: context.asset.input,
 			reducerHandler: context.reducerHandler,
 			stateStore: context.stateStore,
 		});
+		// Console logging result since currently action do not have state store
+		// eslint-disable-next-line no-console
+		console.log(result);
 	}
 }

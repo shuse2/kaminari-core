@@ -1,6 +1,8 @@
 /* eslint-disable class-methods-use-this */
 import { ApplyAssetContext, BaseAsset, ValidateAssetContext } from 'lisk-sdk';
-import { createContract } from '../data_access/contract';
+import { createContract, getContractAddress } from '../data_access/contract';
+import { VM } from '../ewvm';
+import { BaseModuleChannel } from '../types';
 
 interface Asset {
 	amount: bigint;
@@ -34,17 +36,37 @@ export class DeployAsset extends BaseAsset {
 			},
 		},
 	};
+	private readonly _channel: BaseModuleChannel;
 
-	public validate(context: ValidateAssetContext<Asset>): void {
+	constructor(channel: BaseModuleChannel) {
+		super();
+		this._channel = channel;
+	}
+
+	public validate(_context: ValidateAssetContext<Asset>): void {
 		// eslint-disable-next-line no-console
-		console.log(context);
 	}
 
 	public async apply(context: ApplyAssetContext<Asset>): Promise<void> {
 		// inject gas measurement code
-		// const address = getContractAddress(context.transaction.senderAddress, context.transaction.nonce);
+		const address = getContractAddress(context.transaction.senderAddress, context.transaction.nonce);
 		// store contract
-		await createContract(context.stateStore, context.transaction.senderAddress, context.transaction.nonce, context.transaction.senderAddress, context.asset.amount, context.asset.data);
 		await context.reducerHandler.invoke('token:debit', { address: context.transaction.senderAddress, amount: context.asset.amount });
+		const vm = new VM();
+		const result = await vm.execute({
+			balance: BigInt(0),
+			callee: address,
+			caller: context.transaction.senderAddress,
+			origin: context.transaction.senderAddress,
+			originNonce: context.transaction.nonce,
+			code: context.asset.data,
+			channel: this._channel,
+			gasLimit: context.asset.gasLimit,
+			gasPrice: context.asset.gasPrice,
+			input: Buffer.alloc(0),
+			reducerHandler: context.reducerHandler,
+			stateStore: context.stateStore,
+		});
+		await createContract(context.stateStore, context.transaction.senderAddress, context.transaction.nonce, context.transaction.senderAddress, context.asset.amount, Buffer.from(result.resultData));
 	}
 }
