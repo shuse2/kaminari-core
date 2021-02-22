@@ -60,7 +60,6 @@ const execute = async (): Promise<void> => {
 
 execute().then(() => {
 	channel.postMessage({ action: 'executed', usedGas: env.usedGas, resultData: env.output, resultStatus: env.resultStatus } as VMCommunicationExecuted);
-}).catch(err => {
-	console.error(err);
+}).catch(() => {
 	channel.postMessage({ action: 'executed', usedGas: env.usedGas, resultData: env.output, resultStatus: RESULT_STATUS_FAILURE } as VMCommunicationExecuted);
 });

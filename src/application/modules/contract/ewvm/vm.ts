@@ -8,23 +8,19 @@ import { createContract, destructContract, getContract, updateContractValue } fr
 export class VM {
 	private readonly _mutex: utils.jobHandlers.Mutex;
 	private readonly _syncCalls: SyncCalls;
-	private readonly _workers: Worker[];
 	private _usedGas: bigint;
 
 	constructor() {
 		this._mutex = new utils.jobHandlers.Mutex();
 		this._syncCalls = new SyncCalls();
 		this._usedGas = BigInt(0);
-		this._workers = [];
 	}
 
-	async execute(param: VMExecParam): Promise<void> {
-		await this._mutex.runExclusive(async () => {
+	async execute(param: VMExecParam): Promise<VMCommunicationExecuted> {
+		return this._mutex.runExclusive(async () => {
 			const worker = this._getNewWorker(param);
-			this._workers.push(worker, worker);
-			console.log('start running');
-			await this._run(worker, param);
-			console.log('end running');
+			const executionResult = await this._run(worker, param);
+			return executionResult;
 		});
 	}
 
@@ -43,20 +39,19 @@ export class VM {
 			};
 			// eslint-disable-next-line @typescript-eslint/no-misused-promises
 			worker.on('message', async (message: VMCommunicationFromThread) => {
-				console.log({ message });
 				switch (message.action) {
 					case 'executed':
 						done(message);
 						break;
 					case 'storageLoad':
 						await this._syncCalls.handleSyncCall(async () => {
-							const result = await param.stateStore.chain.get('address:index');
+							const result = await param.stateStore.chain.get(`ewvm:${param.callee.toString('binary')}:${Buffer.from(message.key).toString('binary')}`);
 							return result;
 						});
 						break;
 					case 'storageStore':
 						await this._syncCalls.handleSyncCall(async () => {
-							await param.stateStore.chain.set(`address:${message.key.toString('binary')}`, message.value);
+							await param.stateStore.chain.set(`ewvm:${param.callee.toString('binary')}:${Buffer.from(message.key).toString('binary')}`, Buffer.from(message.value));
 							return undefined;
 						});
 						break;

@@ -17,13 +17,13 @@ export type VMCommunicationFromParent = VMCommunicationExec;
 
 export interface VMCommunicationAsyncStorageLoad {
 	action: 'storageLoad';
-	key: Buffer;
+	key: Uint8Array;
 }
 
 export interface VMCommunicationAsyncStorageStore {
 	action: 'storageStore';
-	key: Buffer;
-	value: Buffer;
+	key: Uint8Array;
+	value: Uint8Array;
 }
 
 export interface VMCommunicationAsyncGetExternalBalance {
@@ -90,7 +90,7 @@ export interface VMCommunicationCallStatic {
 
 export interface VMCommunicationExecuted {
 	action: 'executed';
-	resultData: Buffer;
+	resultData: Uint8Array;
 	resultStatus: number;
 	usedGas: bigint;
 }

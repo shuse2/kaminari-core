@@ -18,13 +18,13 @@ import { RESULT_STATUS_REVERT, RESULT_STATUS_SUCCESS } from './constants';
 
 /* eslint-disable no-console */
 interface InitialEnv {
-	caller: Buffer;
-	callee: Buffer;
-	origin: Buffer;
-	code: Buffer;
-	input: Buffer;
+	caller: Uint8Array;
+	callee: Uint8Array;
+	origin: Uint8Array;
+	code: Uint8Array;
+	input: Uint8Array;
 	balance: bigint;
-	generatorAddress: Buffer;
+	generatorAddress: Uint8Array;
 	syncCalls: SyncCalls;
 	messagePort: MessagePort;
 	lastBlockTimestamp: number;
@@ -61,13 +61,13 @@ export class Env {
 		this._syncCalls = data.syncCalls;
 		this._messagePort = data.messagePort;
 
-		this._callee = data.callee;
-		this._caller = data.caller;
-		this._origin = data.origin;
-		this._code = data.code;
-		this._input = data.input;
+		this._callee = Buffer.from(data.callee);
+		this._caller = Buffer.from(data.caller);
+		this._origin = Buffer.from(data.origin);
+		this._code = Buffer.from(data.code);
+		this._input = Buffer.from(data.input);
 		this._balance = data.balance;
-		this._generatorAddress = data.generatorAddress;
+		this._generatorAddress = Buffer.from(data.generatorAddress);
 		this._gasLimit = data.gasLimit;
 		this._gasPrice = data.gasPrice;
 
@@ -246,16 +246,16 @@ export class Env {
 			getCallValue: (resultOffset: number): void => {
 				const bs = Buffer.alloc(8);
 				bs.writeBigUInt64LE(this._balance);
+				// TODO: this is not working
 				bs.copy(this._memory, resultOffset);
 			},
 			codeCopy: (resultOffset: number, codeOffset: number, length: number): void => {
-				console.log('calling code copy', resultOffset, codeOffset, length);
 				if (length > 0) {
 					this._code.copy(this._memory, resultOffset, codeOffset, codeOffset + length);
 				}
 			},
 			getCodeSize: (): number => {
-				console.log('calling code size', this._code.length);
+				// TODO: this is not working
 				return this._code.length;
 			},
 			getBlockCoinbase: (resultOffset: number): void => {
@@ -350,7 +350,7 @@ export class Env {
 				this._origin.copy(this._memory, resultOffset);
 			},
 			finish: (dataPtr: number, dataLen: number): void => {
-				this._output = this._memory.slice(dataPtr, dataPtr + dataPtr + dataLen);
+				this._output = this._memory.slice(dataPtr, dataPtr + dataLen);
 				this._resultStatus = RESULT_STATUS_SUCCESS;
 				throw new Error('Finished');
 			},

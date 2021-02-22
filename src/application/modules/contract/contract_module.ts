@@ -22,7 +22,7 @@ export class ContractModule extends BaseModule {
 			contracts: [],
 		},
 	};
-	public transactionAssets = [new DeployAsset(), new ExecuteAsset(this._channel)];
+	public transactionAssets = [new DeployAsset(this._channel), new ExecuteAsset(this._channel)];
 
 	public actions = {
 		getCode: async (params: Record<string, unknown>): Promise<Buffer | undefined> => {

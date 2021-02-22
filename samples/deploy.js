@@ -5,6 +5,8 @@ const { getContractAddress } = require('../dist/application/modules/contract/dat
 
 const genesisPassphrase = 'peanut hundred pen hawk invite exclude brain chunk gadget wait wrong ready';
 
+const flipper = require('../sol/flipper.json');
+
 const exec = async () => {
 	const client = await apiClient.createWSClient('ws://localhost:8000/ws');
 	const senderPassphrase = passphrase.Mnemonic.generateMnemonic();
@@ -23,14 +25,14 @@ const exec = async () => {
 	console.log('funding to ');
 	await new Promise(resolve => setTimeout(resolve, 15000));
 	// fund the account
-	const wasm = fs.readFileSync(path.join(__dirname, '..', 'sol', 'flipper.wasm'));
+	// const wasm = fs.readFileSync(path.join(__dirname, '..', 'sol', 'flipper.wasm'));
 	const createTx = await client.transaction.create({
 		moduleID: 1111,
 		assetID: 0,
 		fee: 100000000n,
 		senderPublicKey,
 		asset: {
-			data: wasm,
+			data: Buffer.from(flipper.contracts['./sol/flipper.sol'].flipper.ewasm.wasm, 'hex'),
 			amount: 1000000000n,
 			gasLimit: 1000000000n,
 			gasPrice: 10000,
